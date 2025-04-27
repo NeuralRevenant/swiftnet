@@ -1,0 +1,81 @@
+#include "net/tcp_socket.hpp"
+#include <cstring>
+#include <errno.h>
+
+using namespace swiftnet::net;
+
+tcp_socket::tcp_socket(int fd) : fd_(fd)
+{
+    if (fd_ != -1)
+        set_nonblock();
+}
+
+tcp_socket::tcp_socket(tcp_socket &&o) noexcept : fd_(o.fd_) { o.fd_ = -1; }
+
+tcp_socket &tcp_socket::operator=(tcp_socket &&o) noexcept
+{
+    if (this != &o)
+    {
+        close();
+        fd_ = o.fd_;
+        o.fd_ = -1;
+    }
+    return *this;
+}
+
+tcp_socket::~tcp_socket() { close(); }
+
+void tcp_socket::set_nonblock()
+{
+    int f = fcntl(fd_, F_GETFL, 0);
+    fcntl(fd_, F_SETFL, f | O_NONBLOCK);
+}
+
+void tcp_socket::close()
+{
+    if (fd_ != -1)
+    {
+        ::close(fd_);
+        fd_ = -1;
+    }
+}
+
+vthread tcp_socket::async_read(void *buf, std::size_t len)
+{
+    std::size_t read_total = 0;
+    while (read_total < len)
+    {
+        ssize_t r = ::read(fd_, (char *)buf + read_total, len - read_total);
+        if (r > 0)
+        {
+            read_total += r;
+            continue;
+        }
+        if (r == 0)
+            co_return read_total;
+        if (errno == EAGAIN || errno == EWOULDBLOCK)
+            co_await io_awaitable(fd_, POLLIN);
+        else
+            co_return -1;
+    }
+    co_return read_total;
+}
+
+vthread tcp_socket::async_write(const void *buf, std::size_t len)
+{
+    std::size_t written = 0;
+    while (written < len)
+    {
+        ssize_t w = ::write(fd_, (char *)buf + written, len - written);
+        if (w > 0)
+        {
+            written += w;
+            continue;
+        }
+        if (errno == EAGAIN || errno == EWOULDBLOCK)
+            co_await io_awaitable(fd_, POLLOUT);
+        else
+            co_return -1;
+    }
+    co_return written;
+}
