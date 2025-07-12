@@ -17,6 +17,8 @@ void io_context::start(std::size_t threads)
     if (running_)
         return;
     running_ = true;
+    
+#if defined(SWIFTNET_BACKEND_IOURING)
     rings_.resize(threads);
     for (std::size_t i = 0; i < threads; ++i)
     {
@@ -25,6 +27,14 @@ void io_context::start(std::size_t threads)
         pollers_.emplace_back([this, i]
                               { poll_loop(i); });
     }
+#else
+    // For non-uring backends, create minimal poll threads
+    for (std::size_t i = 0; i < threads; ++i)
+    {
+        pollers_.emplace_back([this, i]
+                              { poll_loop(i); });
+    }
+#endif
 }
 
 void io_context::stop()
@@ -33,14 +43,18 @@ void io_context::stop()
     for (auto &p : pollers_)
         if (p.joinable())
             p.join();
+            
+#if defined(SWIFTNET_BACKEND_IOURING)
     for (auto &r : rings_)
         io_uring_queue_exit(&r);
     rings_.clear();
+#endif
     pollers_.clear();
 }
 
 void io_context::poll_loop(std::size_t idx)
 {
+#if defined(SWIFTNET_BACKEND_IOURING)
     auto &ring = rings_[idx];
     while (running_)
     {
@@ -54,6 +68,15 @@ void io_context::poll_loop(std::size_t idx)
             io_uring_cqe_seen(&ring, cqe);
         }
     }
+#else
+    // Simple poll loop for non-uring backends
+    while (running_)
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+#endif
 }
 
+#if defined(SWIFTNET_BACKEND_IOURING)
 io_uring &io_context::ring(std::size_t idx) { return rings_[idx]; }
+#endif

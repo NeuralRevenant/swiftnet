@@ -20,8 +20,8 @@ namespace swiftnet::net
         int fd() const { return fd_; }
         void close();
 
-        vthread async_read(void *buf, std::size_t len);
-        vthread async_write(const void *buf, std::size_t len);
+        vthread_base<int> async_read(void *buf, std::size_t len);
+        vthread_base<int> async_write(const void *buf, std::size_t len);
 
     private:
         int fd_;

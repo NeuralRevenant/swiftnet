@@ -1,8 +1,12 @@
 #ifndef io_awaitable_hpp
 #define io_awaitable_hpp
 
+#include "detail/os_backend.hpp"
 #include <coroutine>
+
+#if defined(SWIFTNET_BACKEND_IOURING)
 #include <liburing.h>
+#endif
 
 namespace swiftnet
 {
@@ -14,16 +18,18 @@ namespace swiftnet
 
         bool await_ready() const noexcept { return false; }
         void await_suspend(std::coroutine_handle<> h);
-        int await_resume() noexcept { return res_; }
-
-        /* completion from poll loop */
-        static void complete(std::coroutine_handle<> *h_ptr, int res);
+        int await_resume();
 
     private:
         int fd_;
         unsigned events_;
         bool oneshot_;
         int res_{0};
+        std::coroutine_handle<> handle_;
+
+        // New simplified I/O polling implementation
+        bool check_immediate_availability();
+        void start_io_polling();
     };
 
 }

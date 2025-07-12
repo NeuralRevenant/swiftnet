@@ -3,6 +3,7 @@
 
 #include "../vthread.hpp"
 #include "tcp_socket.hpp"
+#include <functional>
 
 namespace swiftnet::net
 {
@@ -12,7 +13,7 @@ namespace swiftnet::net
     public:
         explicit acceptor(uint16_t port, int backlog = 1024);
         ~acceptor();
-        vthread async_accept(std::function<void(tcp_socket)> cb);
+        swiftnet::vthread async_accept(std::function<void(tcp_socket)> cb);
 
     private:
         int listen_fd_;
